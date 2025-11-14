@@ -102,7 +102,7 @@ public class ToxicityDetector {
                 int n = Math.min(row.length, labels.length);
                 for (int i = 0; i < n; i++) {
                     double prob = 1.0 / (1.0 + Math.exp(-row[i]));
-                    scores.put(labels[i], prob);
+                    scores.put(labels[i], Double.valueOf(prob));
                 }
 
                 return ToxicityScore.of(text, scores);
