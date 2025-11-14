@@ -8,7 +8,7 @@
 ---
 
 #### Note
-The following resources must be found [here](https://huggingface.co/protectai/unbiased-toxic-roberta-onnx)
+The following resources can be found [here](https://huggingface.co/protectai/unbiased-toxic-roberta-onnx)
 
 - config.json
 - model_quantized.onnx
