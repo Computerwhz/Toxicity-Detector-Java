@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.nio.LongBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
@@ -47,14 +48,28 @@ public class ToxicityDetector {
 
     private Path extractResource(String name) throws IOException {
         try (InputStream is = getClass().getClassLoader().getResourceAsStream(name)) {
-            if (is == null)
+            if (is == null) {
                 throw new FileNotFoundException(name + " not found in resources folder");
-            Path tmp = Files.createTempFile(name, "");
+            }
+
+            // Extract simple filename
+            String fileName = Paths.get(name).getFileName().toString();
+
+            // Ensure suffix includes correct extension
+            String suffix = "";
+            int idx = fileName.lastIndexOf('.');
+            if (idx != -1) {
+                suffix = fileName.substring(idx); // .onnx
+                fileName = fileName.substring(0, idx);
+            }
+
+            Path tmp = Files.createTempFile(fileName + "_", suffix);
             tmp.toFile().deleteOnExit();
             Files.copy(is, tmp, StandardCopyOption.REPLACE_EXISTING);
             return tmp;
         }
     }
+
 
     private String[] loadLabelsFromConfig() throws IOException {
         try (InputStream is = getClass().getClassLoader().getResourceAsStream("config.json")) {
@@ -108,5 +123,9 @@ public class ToxicityDetector {
                 return ToxicityScore.of(text, scores);
             }
         }
+    }
+
+    public static void main(String[] args) throws Exception {
+        System.out.println(new ToxicityDetector().analyze("Hello").getScores());
     }
 }
