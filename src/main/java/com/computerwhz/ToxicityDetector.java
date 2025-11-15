@@ -23,76 +23,53 @@ public class ToxicityDetector {
     private final OrtSession session;
     private final String[] labels;
 
-    public ToxicityDetector() throws Exception {
+    private Path tokenizerPath;
+    private Path modelPath;
+    private Path configPath;
+
+    public ToxicityDetector(Path configPath, Path modelPath, Path tokenizerPath) throws Exception {
         // Extract model + tokenizer to temp files from resources
-        Path modelPath = extractResource("model_quantized.onnx");
-        Path tokenizerPath = extractResource("tokenizer.json");
+
+        this.configPath = configPath;
+        this.modelPath = modelPath;
+        this.tokenizerPath = tokenizerPath;
 
         // Load tokenizer
-        tokenizer = HuggingFaceTokenizer.newInstance(tokenizerPath);
+        tokenizer = HuggingFaceTokenizer.newInstance(this.tokenizerPath);
 
         // Create ONNX Runtime environment and session
         env = OrtEnvironment.getEnvironment();
         SessionOptions opts = new SessionOptions();
         opts.setIntraOpNumThreads(Math.max(1, Runtime.getRuntime().availableProcessors() / 2));
         opts.setInterOpNumThreads(1);
-        session = env.createSession(modelPath.toString(), opts);
+        session = env.createSession(this.modelPath.toString(), opts);
 
         // Load label names from config.json
-        labels = loadLabelsFromConfig();
+        this.labels = loadLabelsFromConfig();
 
         System.out.println("Loaded model with " + labels.length + " labels.");
     }
 
-    private Path extractResource(String resourceName) throws IOException {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
-            if (is == null) {
-                throw new FileNotFoundException(resourceName + " not found in resources folder");
-            }
-
-            String fileName = Paths.get(resourceName).getFileName().toString();
-            String suffix = "";
-            int idx = fileName.lastIndexOf('.');
-            if (idx != -1) {
-                suffix = fileName.substring(idx); // .onnx
-                fileName = fileName.substring(0, idx);
-            }
-
-            Path tmp = Files.createTempFile(fileName + "_", suffix);
-            tmp.toFile().deleteOnExit();
-
-            // Stream copy with buffer
-            try (OutputStream os = Files.newOutputStream(tmp, StandardOpenOption.WRITE)) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    os.write(buffer, 0, bytesRead);
-                }
-            }
-
-            return tmp;
-        }
-    }
-
-
-
     private String[] loadLabelsFromConfig() throws IOException {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream("config.json")) {
-            if (is == null)
-                throw new FileNotFoundException("config.json not found in resources folder");
-
-            ObjectMapper om = new ObjectMapper();
-            Map<String, Object> cfg = om.readValue(is, new TypeReference<>() {
-            });
-            @SuppressWarnings("unchecked")
-            Map<String, String> id2label = (Map<String, String>) cfg.get("id2label");
-
-            return id2label.entrySet().stream()
-                    .sorted(Comparator.comparingInt(e -> Integer.parseInt(e.getKey())))
-                    .map(Map.Entry::getValue)
-                    .toArray(String[]::new);
+        if (!Files.exists(this.configPath)) {
+            throw new FileNotFoundException(this.configPath + " not found");
         }
+
+        ObjectMapper om = new ObjectMapper();
+        Map<String, Object> cfg;
+        try (InputStream is = Files.newInputStream(this.configPath)) {
+            cfg = om.readValue(is, new TypeReference<>() {});
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> id2label = (Map<String, String>) cfg.get("id2label");
+
+        return id2label.entrySet().stream()
+                .sorted(Comparator.comparingInt(e -> Integer.parseInt(e.getKey())))
+                .map(Map.Entry::getValue)
+                .toArray(String[]::new);
     }
+
 
     /**
      * Analyze a single text string for toxicity and identity-related probabilities.
@@ -128,9 +105,5 @@ public class ToxicityDetector {
                 return ToxicityScore.of(text, scores);
             }
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        System.out.println(new ToxicityDetector().analyze("Hello").getScores());
     }
 }
