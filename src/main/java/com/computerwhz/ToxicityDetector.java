@@ -11,11 +11,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.LongBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.util.*;
 
 public class ToxicityDetector {
@@ -46,16 +44,13 @@ public class ToxicityDetector {
         System.out.println("Loaded model with " + labels.length + " labels.");
     }
 
-    private Path extractResource(String name) throws IOException {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(name)) {
+    private Path extractResource(String resourceName) throws IOException {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
             if (is == null) {
-                throw new FileNotFoundException(name + " not found in resources folder");
+                throw new FileNotFoundException(resourceName + " not found in resources folder");
             }
 
-            // Extract simple filename
-            String fileName = Paths.get(name).getFileName().toString();
-
-            // Ensure suffix includes correct extension
+            String fileName = Paths.get(resourceName).getFileName().toString();
             String suffix = "";
             int idx = fileName.lastIndexOf('.');
             if (idx != -1) {
@@ -65,10 +60,20 @@ public class ToxicityDetector {
 
             Path tmp = Files.createTempFile(fileName + "_", suffix);
             tmp.toFile().deleteOnExit();
-            Files.copy(is, tmp, StandardCopyOption.REPLACE_EXISTING);
+
+            // Stream copy with buffer
+            try (OutputStream os = Files.newOutputStream(tmp, StandardOpenOption.WRITE)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    os.write(buffer, 0, bytesRead);
+                }
+            }
+
             return tmp;
         }
     }
+
 
 
     private String[] loadLabelsFromConfig() throws IOException {
